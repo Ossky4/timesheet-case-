@@ -1,13 +1,10 @@
 # Load packages
 import unittest  # running tests
 from pathlib import Path  # handling file paths
-import pandas as pd  # working with dummy data
-from datetime import date  # working with dates
+from unittest.mock import MagicMock, patch
 
 # Local imports
 from timesheet import command_line_interface_functions  # cli functions
-from timesheet import data_functions  # functions for working with data
-from timesheet import timesheet  # timesheet class
 
 
 class TestCommandLineInterfaceFunctions(unittest.TestCase):
@@ -24,18 +21,17 @@ class TestCommandLineInterfaceFunctions(unittest.TestCase):
             "Check argument parser returned",
         )
 
-    def test_parse_command_line_arguments(self):
+    @patch("timesheet.command_line_interface_functions.run_cli_actions")
+    def test_parse_command_line_arguments_parse_only(self, mock_run_cli_actions):
+        """Test parse_command_line_arguments can behave as pure parse."""
 
         # Build the command line interface parser
         parser = command_line_interface_functions.build_command_line_interface()
 
-        # Create the dummy data
-        timesheet_file = Path("outputs/test_timesheet.csv")
-        data_functions.create_dummy_timesheet(file_name=timesheet_file)
-
         # Define the command line arguments and parse
         start_time = "09:00"
         end_time = "11:45"
+        timesheet_file = Path("outputs/test_timesheet.csv")
         arguments = [
             "--file",
             str(timesheet_file),
@@ -44,32 +40,65 @@ class TestCommandLineInterfaceFunctions(unittest.TestCase):
             "--end",
             end_time,
         ]
-        command_line_interface_functions.parse_command_line_arguments(parser, arguments)
-
-        # Load test timesheet
-        my_timesheet = timesheet.Timesheet(file_name=timesheet_file)
-
-        # Check today's date, start time, and end time added
-        n_rows = my_timesheet.timesheet.shape[0]
-        today = date.today().strftime("%Y-%m-%d")
-        self.assertEqual(
-            my_timesheet.timesheet.date[n_rows - 1],
-            pd.Timestamp(today + " 00:00:00"),
-            "Check today's date input correctly",
-        )
-        self.assertEqual(
-            my_timesheet.timesheet.start_time[n_rows - 1],
-            pd.Timestamp("1900-01-01 " + start_time + ":00"),
-            "Check start time added",
-        )
-        self.assertEqual(
-            my_timesheet.timesheet.end_time[n_rows - 1],
-            pd.Timestamp("1900-01-01 " + end_time + ":00"),
-            "Check end time added",
+        args = command_line_interface_functions.parse_command_line_arguments(
+            parser, arguments, run_actions=False
         )
 
-        # Remove timesheet
-        Path.unlink(timesheet_file)
+        # Check parser output
+        self.assertEqual(args.file, str(timesheet_file), "Check file argument parsed")
+        self.assertFalse(args.reset, "Check reset defaults to False")
+        self.assertEqual(args.start, start_time, "Check start argument parsed")
+        self.assertEqual(args.end, end_time, "Check end argument parsed")
+
+        # Check no orchestration happens when explicitly disabled
+        mock_run_cli_actions.assert_not_called()
+
+    @patch("timesheet.command_line_interface_functions.timesheet.Timesheet")
+    def test_run_cli_actions_orchestrates_timesheet_calls(self, mock_timesheet_class):
+        """Test run_cli_actions orchestrates actions around Timesheet."""
+
+        # Define arguments and mock timesheet
+        args = MagicMock(
+            file="outputs/test_timesheet.csv",
+            reset=True,
+            start="09:00",
+            end="11:45",
+        )
+        mock_timesheet = MagicMock()
+        mock_timesheet_class.return_value = mock_timesheet
+
+        # Run orchestration
+        command_line_interface_functions.run_cli_actions(args)
+
+        # Check timesheet construction and action fan-out
+        mock_timesheet_class.assert_called_once_with(file_name=Path(args.file))
+        mock_timesheet.reset_timesheet.assert_called_once_with()
+        mock_timesheet.add_start_time.assert_called_once_with(
+            start_time_string=args.start
+        )
+        mock_timesheet.add_end_time.assert_called_once_with(end_time_string=args.end)
+
+    @patch("timesheet.command_line_interface_functions.timesheet.Timesheet")
+    def test_run_cli_actions_skips_non_requested_actions(self, mock_timesheet_class):
+        """Test run_cli_actions does not execute optional actions when absent."""
+
+        # Define arguments without optional actions
+        args = MagicMock(
+            file="outputs/test_timesheet.csv",
+            reset=False,
+            start=None,
+            end=None,
+        )
+        mock_timesheet = MagicMock()
+        mock_timesheet_class.return_value = mock_timesheet
+
+        # Run orchestration
+        command_line_interface_functions.run_cli_actions(args)
+
+        # Check no optional methods are called
+        mock_timesheet.reset_timesheet.assert_not_called()
+        mock_timesheet.add_start_time.assert_not_called()
+        mock_timesheet.add_end_time.assert_not_called()
 
 
 if __name__ == "__main__":
