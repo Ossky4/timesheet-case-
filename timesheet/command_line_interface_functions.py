@@ -4,8 +4,13 @@ from pathlib import Path  # handling file paths
 from datetime import datetime  # working with dates and times
 import sys  # accessing command line arguments
 
-# Local imports
-from timesheet import timesheet
+
+def _get_timesheet_class():
+    """Import and return Timesheet class lazily to avoid import-time heavy deps."""
+
+    from timesheet.timesheet import Timesheet
+
+    return Timesheet
 
 
 def build_command_line_interface() -> argparse.ArgumentParser:
@@ -101,7 +106,8 @@ def run_cli_actions(args: argparse.Namespace):
     """Run CLI actions against a Timesheet based on parsed arguments."""
 
     # Load timesheet
-    my_timesheet = timesheet.Timesheet(file_name=Path(args.file))
+    Timesheet = _get_timesheet_class()
+    my_timesheet = Timesheet(file_name=Path(args.file))
 
     # Check if resetting timesheet
     if args.reset:
