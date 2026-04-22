@@ -72,7 +72,9 @@ def build_command_line_interface() -> argparse.ArgumentParser:
 
 
 def parse_command_line_arguments(
-    parser: argparse.ArgumentParser, arguments: list[str] = sys.argv[1:]
+    parser: argparse.ArgumentParser,
+    arguments: list[str] = sys.argv[1:],
+    run_actions: bool = True,
 ):
     """Parse command line arguments based on parser provided
 
@@ -87,6 +89,16 @@ def parse_command_line_arguments(
 
     # Get arguments
     args = parser.parse_args(arguments)
+
+    # Backward compatibility for existing internal callers that rely on side effects
+    if run_actions:
+        run_cli_actions(args)
+
+    return args
+
+
+def run_cli_actions(args: argparse.Namespace):
+    """Run CLI actions against a Timesheet based on parsed arguments."""
 
     # Load timesheet
     my_timesheet = timesheet.Timesheet(file_name=Path(args.file))
