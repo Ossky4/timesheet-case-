@@ -53,8 +53,8 @@ class TestCommandLineInterfaceFunctions(unittest.TestCase):
         # Check no orchestration happens when explicitly disabled
         mock_run_cli_actions.assert_not_called()
 
-    @patch("timesheet.command_line_interface_functions.timesheet.Timesheet")
-    def test_run_cli_actions_orchestrates_timesheet_calls(self, mock_timesheet_class):
+    @patch("timesheet.command_line_interface_functions._get_timesheet_class")
+    def test_run_cli_actions_orchestrates_timesheet_calls(self, mock_get_timesheet_class):
         """Test run_cli_actions orchestrates actions around Timesheet."""
 
         # Define arguments and mock timesheet
@@ -65,12 +65,14 @@ class TestCommandLineInterfaceFunctions(unittest.TestCase):
             end="11:45",
         )
         mock_timesheet = MagicMock()
-        mock_timesheet_class.return_value = mock_timesheet
+        mock_timesheet_class = MagicMock(return_value=mock_timesheet)
+        mock_get_timesheet_class.return_value = mock_timesheet_class
 
         # Run orchestration
         command_line_interface_functions.run_cli_actions(args)
 
         # Check timesheet construction and action fan-out
+        mock_get_timesheet_class.assert_called_once_with()
         mock_timesheet_class.assert_called_once_with(file_name=Path(args.file))
         mock_timesheet.reset_timesheet.assert_called_once_with()
         mock_timesheet.add_start_time.assert_called_once_with(
@@ -78,8 +80,8 @@ class TestCommandLineInterfaceFunctions(unittest.TestCase):
         )
         mock_timesheet.add_end_time.assert_called_once_with(end_time_string=args.end)
 
-    @patch("timesheet.command_line_interface_functions.timesheet.Timesheet")
-    def test_run_cli_actions_skips_non_requested_actions(self, mock_timesheet_class):
+    @patch("timesheet.command_line_interface_functions._get_timesheet_class")
+    def test_run_cli_actions_skips_non_requested_actions(self, mock_get_timesheet_class):
         """Test run_cli_actions does not execute optional actions when absent."""
 
         # Define arguments without optional actions
@@ -90,7 +92,7 @@ class TestCommandLineInterfaceFunctions(unittest.TestCase):
             end=None,
         )
         mock_timesheet = MagicMock()
-        mock_timesheet_class.return_value = mock_timesheet
+        mock_get_timesheet_class.return_value = MagicMock(return_value=mock_timesheet)
 
         # Run orchestration
         command_line_interface_functions.run_cli_actions(args)
